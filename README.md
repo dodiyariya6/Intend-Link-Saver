@@ -5,10 +5,10 @@ An AI-driven link repository that remembers *why* you saved a link.
 Implemented so far: project scaffolding, database models/migrations,
 authentication (register/login/JWT), Link CRUD (ownership-scoped,
 pagination, filtering), an AI enrichment pipeline (fetch → summarize → tag
-→ classify via Claude), and embedding generation for semantic search.
-Semantic search itself and the Memory Assistant are not implemented yet.
-See `/root/.claude/plans/` (or your own copy of the architecture plan) for
-the full design.
+→ classify via Claude), embedding generation, and semantic search
+(pgvector cosine similarity). The conversational Memory Assistant is not
+implemented yet. See `/root/.claude/plans/` (or your own copy of the
+architecture plan) for the full design.
 
 ## Stack
 
@@ -28,11 +28,11 @@ intend-link-saver/
 │   │   ├── db.py         # SQLAlchemy engine/session
 │   │   ├── dependencies.py  # get_current_user (JWT auth dependency)
 │   │   ├── models/       # User, Link, Tag ORM models
-│   │   ├── schemas/      # auth.py, link.py implemented; search.py (empty) future
-│   │   ├── routers/      # auth.py, links.py implemented; search/tags (empty) future
+│   │   ├── schemas/      # auth.py, link.py, search.py implemented; tags.py (empty) future
+│   │   ├── routers/      # auth.py, links.py, search.py implemented; tags.py (empty) future
 │   │   ├── services/     # auth_service, link_service, fetch_service, ai_service,
-│   │   │                 # embedding_service, enrichment_service implemented;
-│   │   │                 # search_service (empty) future
+│   │   │                 # embedding_service, enrichment_service, search_service
+│   │   │                 # implemented
 │   │   └── prompts/      # summarize_and_tag.py implemented
 │   ├── alembic/          # migrations setup, no migrations yet
 │   └── tests/
@@ -173,3 +173,19 @@ Modules:
 `Link.status` values: `"ready"` (saved, not yet enriched) → `"enriched"` (AI succeeded — embedding may or may not have) or `"failed"` (fetch or AI step failed — link preserved, retry by calling `/enrich` again).
 
 Requires `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in `backend/.env` to actually call Claude and generate embeddings; without them, both steps fail gracefully (link preserved, `success`/`embedding_generated` reflect what actually happened).
+
+## Semantic Search
+
+Natural-language search over the current user's *enriched* links, ranked
+by cosine similarity between the query's embedding and each link's stored
+embedding (Module 6). Reuses `embedding_service.generate_embedding()` to
+embed the query — this module never talks to an embedding provider itself.
+
+| Endpoint | Description |
+|---|---|
+| `GET /search?q=...` | `page`, `page_size`, `intent_category`, repeated `tags=` (matches any) all optional. Returns `{ query, items, total, page, page_size, pages }`, each item a link plus its `similarity` score (1.0 = identical, 0.0 = unrelated). |
+
+- `app/services/search_service.py` — `search_links()` runs `Link.embedding.cosine_distance(query_vector)` (pgvector's `<=>` operator) scoped to `user_id`, with `embedding IS NOT NULL` (links not yet enriched are excluded — they have nothing to rank against) and the optional `intent_category`/`tags` filters, ordered by similarity descending.
+- If the query can't be embedded (provider not configured/unavailable), the router returns `503` rather than silently returning an empty list — a real failure shouldn't look identical to "nothing matched".
+- If the user has no enriched links yet (or genuinely nothing similar), the response is just `items: []` — never an error.
+- An HNSW index (`vector_cosine_ops`, matching the `<=>` operator used above) is created on `links.embedding` via migration `6853f329ffd3` for query performance at scale; correctness doesn't depend on it.
