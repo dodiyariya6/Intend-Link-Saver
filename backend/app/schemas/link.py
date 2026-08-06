@@ -53,3 +53,4 @@ class LinkEnrichResponse(BaseModel):
     success: bool
     detail: str
     link: LinkOut
+    embedding_generated: bool = False

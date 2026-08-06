@@ -115,11 +115,16 @@ def enrich_link(
     current_user: User = Depends(get_current_user),
 ) -> LinkEnrichResponse:
     """
-    Run the AI enrichment pipeline (fetch page -> summarize/tag/classify)
-    for a link the user already saved. On any failure the link is left
-    exactly as it was (see enrichment_service) — this never loses data,
-    it just reports success/failure with a human-readable detail.
+    Run the AI enrichment pipeline (fetch page -> summarize/tag/classify ->
+    embed) for a link the user already saved. On any failure the link is
+    left exactly as it was (see enrichment_service) — this never loses
+    data, it just reports success/failure with a human-readable detail.
     """
     link = _get_owned_link_or_404(db, current_user, link_id)
     outcome = enrichment_service.enrich_link(db, link)
-    return LinkEnrichResponse(success=outcome.success, detail=outcome.detail, link=_serialize(outcome.link))
+    return LinkEnrichResponse(
+        success=outcome.success,
+        detail=outcome.detail,
+        link=_serialize(outcome.link),
+        embedding_generated=outcome.embedding_generated,
+    )

@@ -1,8 +1,8 @@
 """
 Application settings, loaded from environment variables / .env file.
 
-No business logic here yet — just the configuration surface the rest of the
-app (db.py, main.py, future services) will read from.
+Just the configuration surface the rest of the app (db.py, main.py,
+services) reads from.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,12 +13,19 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://postgres:postgres@db:5432/intend_link_saver"
 
-    # Placeholder for future auth work (not implemented yet)
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
 
-    # Placeholder for future AI integration (not implemented yet)
+    # Claude — summarization/tagging/intent classification (app/services/ai_service.py)
     anthropic_api_key: str = ""
+
+    # Embeddings — semantic-search vectors (app/services/embedding_service.py).
+    # text-embedding-3-small outputs 1536 dims, matching Link.embedding's
+    # column size exactly. Separate provider/model from Claude on purpose —
+    # Anthropic doesn't offer an embeddings API, and keeping this behind its
+    # own setting makes swapping providers (e.g. Voyage) a config change.
+    openai_api_key: str = ""
+    embedding_model: str = "text-embedding-3-small"
 
     cors_origins: list[str] = ["http://localhost:5173"]
 

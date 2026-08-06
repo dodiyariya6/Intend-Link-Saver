@@ -1,5 +1,6 @@
 """Router-level tests for POST /links/{id}/enrich, including ownership."""
-from app.services import ai_service, enrichment_service, fetch_service
+from app.models.link import EMBEDDING_DIM
+from app.services import ai_service, embedding_service, enrichment_service, fetch_service
 
 
 def _register_and_login(client, email: str, password: str = "supersecret123") -> str:
@@ -39,6 +40,7 @@ def test_enrich_success(client, monkeypatch):
             ai_reason="Inferred reason.",
         ),
     )
+    monkeypatch.setattr(embedding_service, "generate_embedding", lambda text: [0.2] * EMBEDDING_DIM)
 
     token = _register_and_login(client, "enrich-router-b@example.com")
     create_resp = client.post(
@@ -50,11 +52,43 @@ def test_enrich_success(client, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
+    assert body["embedding_generated"] is True
     assert body["link"]["ai_summary"] == "A concise summary."
     assert body["link"]["intent_category"] == "research"
     assert body["link"]["status"] == "enriched"
     assert sorted(body["link"]["tags"]) == ["one", "three", "two"]
     assert body["link"]["title"] == "Extracted Title"
+
+
+def test_enrich_embedding_failure_still_reports_overall_success(client, monkeypatch):
+    monkeypatch.setattr(fetch_service, "fetch_page_text", lambda url: ("page body", None))
+    monkeypatch.setattr(
+        ai_service,
+        "summarize_and_tag",
+        lambda **kwargs: ai_service.EnrichmentResult(
+            ai_summary="Summary.", tags=["a", "b", "c"], intent_category="research", ai_reason=None
+        ),
+    )
+
+    def _raise_embedding_error(text):
+        raise embedding_service.EmbeddingServiceError("provider unavailable")
+
+    monkeypatch.setattr(embedding_service, "generate_embedding", _raise_embedding_error)
+
+    token = _register_and_login(client, "enrich-router-embed-fail@example.com")
+    create_resp = client.post(
+        "/links", json={"url": "https://example.com/z"}, headers=_auth_headers(token)
+    )
+    link_id = create_resp.json()["id"]
+
+    response = client.post(f"/links/{link_id}/enrich", headers=_auth_headers(token))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True  # AI summary/tags/category still succeeded
+    assert body["embedding_generated"] is False
+    assert "embedding" in body["detail"].lower()
+    assert body["link"]["status"] == "enriched"
+    assert body["link"]["ai_summary"] == "Summary."
 
 
 def test_enrich_failure_returns_meaningful_status_and_preserves_link(client, monkeypatch):

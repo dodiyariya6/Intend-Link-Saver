@@ -4,17 +4,18 @@ An AI-driven link repository that remembers *why* you saved a link.
 
 Implemented so far: project scaffolding, database models/migrations,
 authentication (register/login/JWT), Link CRUD (ownership-scoped,
-pagination, filtering), and an AI enrichment pipeline (fetch → summarize →
-tag → classify via Claude). Embeddings and semantic search are not
-implemented yet. See `/root/.claude/plans/` (or your own copy of the
-architecture plan) for the full design.
+pagination, filtering), an AI enrichment pipeline (fetch → summarize → tag
+→ classify via Claude), and embedding generation for semantic search.
+Semantic search itself and the Memory Assistant are not implemented yet.
+See `/root/.claude/plans/` (or your own copy of the architecture plan) for
+the full design.
 
 ## Stack
 
 - **Backend**: FastAPI (Python), SQLAlchemy, Alembic
 - **Frontend**: React + TypeScript (Vite)
 - **Database**: PostgreSQL with the `pgvector` extension
-- **AI**: Anthropic Claude — summarization, tagging, intent classification
+- **AI**: Anthropic Claude (summarization, tagging, intent classification) + OpenAI `text-embedding-3-small` (embeddings)
 
 ## Project Structure
 
@@ -30,7 +31,8 @@ intend-link-saver/
 │   │   ├── schemas/      # auth.py, link.py implemented; search.py (empty) future
 │   │   ├── routers/      # auth.py, links.py implemented; search/tags (empty) future
 │   │   ├── services/     # auth_service, link_service, fetch_service, ai_service,
-│   │   │                 # enrichment_service implemented; search_service (empty) future
+│   │   │                 # embedding_service, enrichment_service implemented;
+│   │   │                 # search_service (empty) future
 │   │   └── prompts/      # summarize_and_tag.py implemented
 │   ├── alembic/          # migrations setup, no migrations yet
 │   └── tests/
@@ -159,14 +161,15 @@ note is never overwritten.
 
 | Endpoint | Description |
 |---|---|
-| `POST /links/{id}/enrich` | Runs the pipeline for an already-saved link. Returns `{ success, detail, link }`. |
+| `POST /links/{id}/enrich` | Runs the pipeline (fetch → summarize/tag/classify → embed) for an already-saved link. Returns `{ success, detail, link, embedding_generated }`. |
 
 Modules:
 - `app/services/fetch_service.py` — HTTP fetch + `trafilatura` readable-text extraction. Raises `FetchError` on any failure.
 - `app/prompts/summarize_and_tag.py` — the single source of truth for the Claude prompt text and the "is the user's note sparse?" rule.
 - `app/services/ai_service.py` — the **only** module that talks to the Anthropic SDK. Builds the request, parses/validates the JSON response, raises `AIServiceError` on any failure. Swapping providers/models means changing this file only.
-- `app/services/enrichment_service.py` — orchestrates fetch → AI → persist. On any failure, the link is left exactly as it was except `status` becomes `"failed"`; nothing is deleted or partially overwritten. AI-generated tags are merged with (not replacing) any tags the user already added manually.
+- `app/services/embedding_service.py` — the **only** module that talks to an embedding provider (`EmbeddingProvider` ABC + `OpenAIEmbeddingProvider`). `build_embedding_input()` composes `user_note` (or `ai_reason` as fallback) + `ai_summary` + tags — search should match on *why* something was saved, not just what it's about. Raises `EmbeddingServiceError` on any failure.
+- `app/services/enrichment_service.py` — orchestrates fetch → AI → embed → persist. On a fetch/AI failure, the link is left exactly as it was except `status` becomes `"failed"`. An embedding failure is non-fatal to the rest — the AI summary/tags/category are still saved, `status` still becomes `"enriched"`, but `embedding_generated` comes back `false`. AI-generated tags are merged with (not replacing) any tags the user already added manually. Every call to `/enrich` regenerates the embedding from whatever content is current — there's no skip-if-exists caching, so re-triggering enrichment after editing a link's note/url/tags naturally produces an up-to-date vector.
 
-`Link.status` values: `"ready"` (saved, not yet enriched) → `"enriched"` (AI succeeded) or `"failed"` (fetch or AI step failed — link preserved, retry by calling `/enrich` again).
+`Link.status` values: `"ready"` (saved, not yet enriched) → `"enriched"` (AI succeeded — embedding may or may not have) or `"failed"` (fetch or AI step failed — link preserved, retry by calling `/enrich` again).
 
-Requires `ANTHROPIC_API_KEY` in `backend/.env` to actually call Claude; without it, enrichment fails gracefully (`success: false`, link preserved).
+Requires `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in `backend/.env` to actually call Claude and generate embeddings; without them, both steps fail gracefully (link preserved, `success`/`embedding_generated` reflect what actually happened).
