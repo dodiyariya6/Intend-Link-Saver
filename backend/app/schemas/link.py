@@ -47,3 +47,9 @@ class LinkListResponse(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+class LinkEnrichResponse(BaseModel):
+    success: bool
+    detail: str
+    link: LinkOut

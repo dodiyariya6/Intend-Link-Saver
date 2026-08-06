@@ -1,2 +1,2 @@
-# Claude prompt templates will be added here.
-# Intentionally empty for now — no AI integration yet.
+# Claude prompt templates. summarize_and_tag.py is implemented; more will
+# be added as further AI-driven features (e.g. conversational recall) land.

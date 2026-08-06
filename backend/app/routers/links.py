@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.link import LinkCreate, LinkListResponse, LinkOut, LinkUpdate
-from app.services import link_service
+from app.schemas.link import LinkCreate, LinkEnrichResponse, LinkListResponse, LinkOut, LinkUpdate
+from app.services import enrichment_service, link_service
 
 router = APIRouter(prefix="/links", tags=["links"])
 
@@ -106,3 +106,20 @@ def delete_link(
     link = _get_owned_link_or_404(db, current_user, link_id)
     link_service.delete_link(db, link)
     return None
+
+
+@router.post("/{link_id}/enrich", response_model=LinkEnrichResponse)
+def enrich_link(
+    link_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LinkEnrichResponse:
+    """
+    Run the AI enrichment pipeline (fetch page -> summarize/tag/classify)
+    for a link the user already saved. On any failure the link is left
+    exactly as it was (see enrichment_service) — this never loses data,
+    it just reports success/failure with a human-readable detail.
+    """
+    link = _get_owned_link_or_404(db, current_user, link_id)
+    outcome = enrichment_service.enrich_link(db, link)
+    return LinkEnrichResponse(success=outcome.success, detail=outcome.detail, link=_serialize(outcome.link))

@@ -3,17 +3,18 @@
 An AI-driven link repository that remembers *why* you saved a link.
 
 Implemented so far: project scaffolding, database models/migrations,
-authentication (register/login/JWT), and Link CRUD (ownership-scoped,
-pagination, filtering — no AI enrichment yet). AI summarization, embeddings,
-and semantic search are not implemented yet. See `/root/.claude/plans/` (or
-your own copy of the architecture plan) for the full design.
+authentication (register/login/JWT), Link CRUD (ownership-scoped,
+pagination, filtering), and an AI enrichment pipeline (fetch → summarize →
+tag → classify via Claude). Embeddings and semantic search are not
+implemented yet. See `/root/.claude/plans/` (or your own copy of the
+architecture plan) for the full design.
 
 ## Stack
 
 - **Backend**: FastAPI (Python), SQLAlchemy, Alembic
 - **Frontend**: React + TypeScript (Vite)
 - **Database**: PostgreSQL with the `pgvector` extension
-- **AI**: Anthropic Claude (not yet integrated)
+- **AI**: Anthropic Claude — summarization, tagging, intent classification
 
 ## Project Structure
 
@@ -28,8 +29,9 @@ intend-link-saver/
 │   │   ├── models/       # User, Link, Tag ORM models
 │   │   ├── schemas/      # auth.py, link.py implemented; search.py (empty) future
 │   │   ├── routers/      # auth.py, links.py implemented; search/tags (empty) future
-│   │   ├── services/     # auth_service.py, link_service.py implemented; rest (empty) future
-│   │   └── prompts/      # (empty) future Claude prompt templates
+│   │   ├── services/     # auth_service, link_service, fetch_service, ai_service,
+│   │   │                 # enrichment_service implemented; search_service (empty) future
+│   │   └── prompts/      # summarize_and_tag.py implemented
 │   ├── alembic/          # migrations setup, no migrations yet
 │   └── tests/
 ├── frontend/         # React + Vite app
@@ -133,9 +135,8 @@ scoped to the current user — every query filters on `Link.user_id`, so a
 link belonging to another user is indistinguishable from one that doesn't
 exist (both return 404).
 
-No AI processing happens here: `ai_summary`, `ai_reason`, and the embedding
-column are left empty for a later enrichment module to fill in. `status`
-just reflects "saved successfully", not "AI-processed".
+Creating/updating a link never triggers AI processing by itself — `ai_summary`,
+`ai_reason`, and the embedding column stay empty until enrichment (below) runs.
 
 | Endpoint | Description |
 |---|---|
@@ -147,3 +148,25 @@ just reflects "saved successfully", not "AI-processed".
 
 Tags are user-scoped, trimmed/lowercased, and de-duplicated automatically;
 referencing a tag name that doesn't exist yet creates it.
+
+## AI Enrichment Pipeline
+
+Fetches the saved page, extracts readable text, and asks Claude (one call)
+to summarize it, propose 3-7 tags, classify an intent category, and — only
+when the user didn't provide their own note (or it was too short to be
+useful) — infer a short reason it might be worth saving. The user's own
+note is never overwritten.
+
+| Endpoint | Description |
+|---|---|
+| `POST /links/{id}/enrich` | Runs the pipeline for an already-saved link. Returns `{ success, detail, link }`. |
+
+Modules:
+- `app/services/fetch_service.py` — HTTP fetch + `trafilatura` readable-text extraction. Raises `FetchError` on any failure.
+- `app/prompts/summarize_and_tag.py` — the single source of truth for the Claude prompt text and the "is the user's note sparse?" rule.
+- `app/services/ai_service.py` — the **only** module that talks to the Anthropic SDK. Builds the request, parses/validates the JSON response, raises `AIServiceError` on any failure. Swapping providers/models means changing this file only.
+- `app/services/enrichment_service.py` — orchestrates fetch → AI → persist. On any failure, the link is left exactly as it was except `status` becomes `"failed"`; nothing is deleted or partially overwritten. AI-generated tags are merged with (not replacing) any tags the user already added manually.
+
+`Link.status` values: `"ready"` (saved, not yet enriched) → `"enriched"` (AI succeeded) or `"failed"` (fetch or AI step failed — link preserved, retry by calling `/enrich` again).
+
+Requires `ANTHROPIC_API_KEY` in `backend/.env` to actually call Claude; without it, enrichment fails gracefully (`success: false`, link preserved).

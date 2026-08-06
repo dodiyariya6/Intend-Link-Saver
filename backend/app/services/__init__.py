@@ -1,2 +1,2 @@
-# Service modules (ai_service, fetch_service, search_service, auth_service)
-# will be added here. Intentionally empty for now — no business logic yet.
+# Service modules: auth_service, link_service, fetch_service, ai_service,
+# enrichment_service are implemented. search_service is not implemented yet.
