@@ -2,10 +2,11 @@
 
 An AI-driven link repository that remembers *why* you saved a link.
 
-Implemented so far: project scaffolding, database models/migrations, and
-authentication (register/login/JWT). Link CRUD, AI features, and search are
-not implemented yet. See `/root/.claude/plans/` (or your own copy of the
-architecture plan) for the full design.
+Implemented so far: project scaffolding, database models/migrations,
+authentication (register/login/JWT), and Link CRUD (ownership-scoped,
+pagination, filtering — no AI enrichment yet). AI summarization, embeddings,
+and semantic search are not implemented yet. See `/root/.claude/plans/` (or
+your own copy of the architecture plan) for the full design.
 
 ## Stack
 
@@ -25,9 +26,9 @@ intend-link-saver/
 │   │   ├── db.py         # SQLAlchemy engine/session
 │   │   ├── dependencies.py  # get_current_user (JWT auth dependency)
 │   │   ├── models/       # User, Link, Tag ORM models
-│   │   ├── schemas/      # auth.py implemented; rest (empty) future
-│   │   ├── routers/      # auth.py implemented; links/search/tags (empty) future
-│   │   ├── services/     # auth_service.py implemented; rest (empty) future
+│   │   ├── schemas/      # auth.py, link.py implemented; search.py (empty) future
+│   │   ├── routers/      # auth.py, links.py implemented; search/tags (empty) future
+│   │   ├── services/     # auth_service.py, link_service.py implemented; rest (empty) future
 │   │   └── prompts/      # (empty) future Claude prompt templates
 │   ├── alembic/          # migrations setup, no migrations yet
 │   └── tests/
@@ -122,3 +123,27 @@ source .venv/bin/activate
 export TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/intend_link_saver_test
 pytest
 ```
+
+## Link Management
+
+CRUD for saved links, implemented in `app/services/link_service.py` and
+`app/routers/links.py`. All routes require `Authorization: Bearer <token>`
+(via the same `get_current_user` dependency from the auth module) and are
+scoped to the current user — every query filters on `Link.user_id`, so a
+link belonging to another user is indistinguishable from one that doesn't
+exist (both return 404).
+
+No AI processing happens here: `ai_summary`, `ai_reason`, and the embedding
+column are left empty for a later enrichment module to fill in. `status`
+just reflects "saved successfully", not "AI-processed".
+
+| Endpoint | Description |
+|---|---|
+| `POST /links` | `{ url, title?, note?, intent_category?, tags? }` → creates a link. `url` is validated (must be a well-formed http(s) URL). |
+| `GET /links` | Paginated list (`page`, `page_size`), filterable by `intent_category` and `tags` (repeat `tags=` for multiple — matches any). |
+| `GET /links/{id}` | Fetch a single link. |
+| `PATCH /links/{id}` | Partial update — only provided fields change. `tags` (if provided) replaces the link's tag set entirely. |
+| `DELETE /links/{id}` | Delete a link. |
+
+Tags are user-scoped, trimmed/lowercased, and de-duplicated automatically;
+referencing a tag name that doesn't exist yet creates it.
