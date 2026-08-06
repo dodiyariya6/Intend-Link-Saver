@@ -12,8 +12,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.config import settings
 from app.db import Base
-
-# import app.models  # noqa — uncomment once models exist, so Alembic can see them
+import app.models  # noqa: F401 — populates Base.metadata for autogenerate
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

@@ -74,6 +74,27 @@ npm run dev
 ## Database
 
 The `db` Docker service uses the [`pgvector/pgvector`](https://github.com/pgvector/pgvector)
-image (Postgres 16 with the `pgvector` extension preinstalled). No tables or
-migrations exist yet — `backend/alembic/` is wired up and ready for the first
-migration once models are added.
+image (Postgres 16 with the `pgvector` extension preinstalled).
+
+### Models
+
+- `User` — accounts (`users`)
+- `Link` — saved links, including `user_note`/`ai_reason` (the "why"), `ai_summary`,
+  `intent_category`, and the `embedding` vector column used for semantic search (`links`)
+- `Tag` — user-defined/AI-generated tags (`tags`), joined to links via `link_tags`
+
+See `backend/app/models/` and the architecture plan for the full schema rationale.
+
+### Running migrations
+
+```bash
+cd backend
+source .venv/bin/activate   # or however you manage your virtualenv
+alembic upgrade head
+```
+
+To generate a new migration after changing models:
+
+```bash
+alembic revision --autogenerate -m "describe the change"
+```
