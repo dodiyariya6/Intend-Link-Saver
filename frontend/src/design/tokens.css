@@ -1,0 +1,48 @@
+/**
+ * Design tokens — the single source of truth for every color, shadow, and
+ * motion value in the app. Light theme only, per the approved design
+ * system. Tailwind's theme (tailwind.config.ts) reads colors/shadows from
+ * these custom properties rather than duplicating literal values.
+ */
+:root {
+  /* Color — backgrounds */
+  --color-bg-canvas: #faf9f6;
+  --color-bg-surface: #ffffff;
+  --color-bg-surface-sunken: #f4f2ee;
+  --color-bg-surface-hover: #f7f5f1;
+
+  /* Color — borders */
+  --color-border-subtle: #eae7e1;
+  --color-border-default: #dedad2;
+  --color-border-strong: #c9c4b9;
+
+  /* Color — text */
+  --color-text-primary: #221f1a;
+  --color-text-secondary: #6b665c;
+  --color-text-tertiary: #9c9686;
+  --color-text-on-accent: #ffffff;
+
+  /* Color — accent (muted sage-green) */
+  --color-accent: #6e7f5c;
+  --color-accent-hover: #5d6d4d;
+  --color-accent-subtle: #eef1e7;
+  --color-accent-border: #c3cdb2;
+
+  /* Color — status */
+  --color-success: #4c7a5e;
+  --color-warning: #a67c3d;
+  --color-danger: #b14b3f;
+  --color-danger-subtle: #fbeeec;
+
+  /* Shadow */
+  --shadow-xs: 0 1px 2px rgba(34, 31, 26, 0.04);
+  --shadow-sm: 0 2px 6px rgba(34, 31, 26, 0.06);
+  --shadow-md: 0 8px 24px rgba(34, 31, 26, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(110, 127, 92, 0.25);
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --duration-base: 180ms;
+  --duration-slow: 200ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}

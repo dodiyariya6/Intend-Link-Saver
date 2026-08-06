@@ -5,15 +5,16 @@ An AI-driven link repository that remembers *why* you saved a link.
 Implemented so far: project scaffolding, database models/migrations,
 authentication (register/login/JWT), Link CRUD (ownership-scoped,
 pagination, filtering), an AI enrichment pipeline (fetch → summarize → tag
-→ classify via Claude), embedding generation, and semantic search
-(pgvector cosine similarity). The conversational Memory Assistant is not
-implemented yet. See `/root/.claude/plans/` (or your own copy of the
-architecture plan) for the full design.
+→ classify via Claude), embedding generation, semantic search (pgvector
+cosine similarity), and a reusable frontend UI component library + design
+system. No product pages (dashboard/login/search UI) or the conversational
+Memory Assistant are implemented yet. See `/root/.claude/plans/` (or your
+own copy of the architecture plan) for the full design.
 
 ## Stack
 
 - **Backend**: FastAPI (Python), SQLAlchemy, Alembic
-- **Frontend**: React + TypeScript (Vite)
+- **Frontend**: React + TypeScript (Vite), Tailwind CSS, Lucide React icons
 - **Database**: PostgreSQL with the `pgvector` extension
 - **AI**: Anthropic Claude (summarization, tagging, intent classification) + OpenAI `text-embedding-3-small` (embeddings)
 
@@ -38,9 +39,18 @@ intend-link-saver/
 │   └── tests/
 ├── frontend/         # React + Vite app
 │   └── src/
+│       ├── design/       # design tokens (CSS custom properties)
+│       ├── lib/          # cn() classname utility
+│       ├── components/
+│       │   ├── ui/       # Typography, Button, Input, TextArea, Card, Badge,
+│       │   │             # Tag, NavBar, Toast — the reusable component library
+│       │   └── feedback/ # EmptyState, ErrorState, Skeleton
+│       ├── app/
+│       │   ├── layout/   # Container, AppShell, AuthLayout (base layout components)
+│       │   └── providers.tsx  # app-wide providers (ToastProvider)
+│       ├── dev/          # internal-only component preview, not a product page
 │       ├── api/          # (empty) future API client
-│       ├── components/   # (empty) future components
-│       ├── pages/        # (empty) future pages
+│       ├── pages/        # (empty) future pages — no product UI built yet
 │       └── hooks/        # (empty) future hooks
 └── docker-compose.yml
 ```
@@ -74,7 +84,9 @@ uvicorn app.main:app --reload
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev    # dev server at http://localhost:5173
+npm test       # component library smoke tests (vitest)
+npm run build  # production build (tsc -b && vite build)
 ```
 
 ## Database
@@ -189,3 +201,38 @@ embed the query — this module never talks to an embedding provider itself.
 - If the query can't be embedded (provider not configured/unavailable), the router returns `503` rather than silently returning an empty list — a real failure shouldn't look identical to "nothing matched".
 - If the user has no enriched links yet (or genuinely nothing similar), the response is just `items: []` — never an error.
 - An HNSW index (`vector_cosine_ops`, matching the `<=>` operator used above) is created on `links.embedding` via migration `6853f329ffd3` for query performance at scale; correctness doesn't depend on it.
+
+## Frontend Design System & Component Library
+
+A reusable UI component library implementing the approved design system —
+light theme, warm off-white canvas, white surfaces, dark neutral text, one
+muted sage-green accent, Manrope typeface, Lucide React icons, 8px spacing
+grid. No product pages are built yet; this is the foundation they'll be
+built from.
+
+- `src/design/tokens.css` — every color/shadow/motion value as CSS custom
+  properties; `tailwind.config.ts` maps Tailwind's theme onto them. Tailwind's
+  *native* numeric spacing scale (already `key × 4px`) is used directly for
+  spacing/sizing rather than redefined, since it already is an 8px grid on
+  its even keys — redefining it risked (and briefly did, before being
+  fixed) silently breaking height utilities like `h-10`/`h-12` that Button/
+  Input rely on for their spec'd pixel sizes.
+- `src/components/ui/` — `Typography` (`Heading`/`Text`, the only way text
+  should be styled anywhere in the app), `Button`/`IconButton`, `Input`,
+  `TextArea`, `Card` (+`CardHeader`/`CardBody`/`CardFooter`), `Badge`, `Tag`,
+  `NavBar`/`NavLinkItem`, `Toast` (+`ToastProvider`/`useToast`).
+- `src/components/feedback/` — `EmptyState`, `ErrorState`, `Skeleton`/`CardSkeleton`.
+- `src/app/layout/` — `Container`, `AppShell` (top nav only, no permanent
+  sidebar), `AuthLayout`. `src/app/providers.tsx` composes app-wide
+  providers (`ToastProvider` so far).
+- `src/dev/ComponentPreview.tsx` — **internal only**, not routed/linked
+  anywhere; exists solely so the library can be visually verified. Not a
+  product page.
+
+Every component is covered by a render/accessibility smoke test
+(`npm test`, 38 tests) — labels are associated correctly, icon-only buttons
+require `aria-label`, error states use `role="alert"`, toasts use
+`role="status"`/`role="alert"` with appropriate `aria-live`, decorative
+elements (skeletons, icons) are `aria-hidden`. Visual/responsive behavior
+was additionally verified with real rendered screenshots (desktop 1440px
+and narrow 768px) via the internal preview page.
