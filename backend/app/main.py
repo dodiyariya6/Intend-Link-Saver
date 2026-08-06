@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.routers import auth
 
 app = FastAPI(title=settings.app_name)
 
@@ -26,9 +27,10 @@ def health_check():
     return {"status": "ok", "service": settings.app_name}
 
 
+app.include_router(auth.router)
+
 # Future routers (not implemented yet):
-# from app.routers import auth, links, search, tags
-# app.include_router(auth.router)
+# from app.routers import links, search, tags
 # app.include_router(links.router)
 # app.include_router(search.router)
 # app.include_router(tags.router)

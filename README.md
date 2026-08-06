@@ -2,10 +2,10 @@
 
 An AI-driven link repository that remembers *why* you saved a link.
 
-This repo currently contains **project scaffolding only** — no authentication,
-business logic, AI features, database models, or APIs are implemented yet.
-See `/root/.claude/plans/` (or your own copy of the architecture plan) for the
-full design.
+Implemented so far: project scaffolding, database models/migrations, and
+authentication (register/login/JWT). Link CRUD, AI features, and search are
+not implemented yet. See `/root/.claude/plans/` (or your own copy of the
+architecture plan) for the full design.
 
 ## Stack
 
@@ -20,13 +20,14 @@ full design.
 intend-link-saver/
 ├── backend/          # FastAPI app
 │   ├── app/
-│   │   ├── main.py       # app entrypoint + health check
+│   │   ├── main.py       # app entrypoint, health check, router mounting
 │   │   ├── config.py     # settings
 │   │   ├── db.py         # SQLAlchemy engine/session
-│   │   ├── models/       # (empty) future ORM models
-│   │   ├── schemas/      # (empty) future Pydantic schemas
-│   │   ├── routers/      # (empty) future API routers
-│   │   ├── services/     # (empty) future business logic
+│   │   ├── dependencies.py  # get_current_user (JWT auth dependency)
+│   │   ├── models/       # User, Link, Tag ORM models
+│   │   ├── schemas/      # auth.py implemented; rest (empty) future
+│   │   ├── routers/      # auth.py implemented; links/search/tags (empty) future
+│   │   ├── services/     # auth_service.py implemented; rest (empty) future
 │   │   └── prompts/      # (empty) future Claude prompt templates
 │   ├── alembic/          # migrations setup, no migrations yet
 │   └── tests/
@@ -97,4 +98,27 @@ To generate a new migration after changing models:
 
 ```bash
 alembic revision --autogenerate -m "describe the change"
+```
+
+## Authentication
+
+JWT-based auth, implemented in `app/services/auth_service.py` (password
+hashing via bcrypt, token issuance/verification) and `app/dependencies.py`
+(`get_current_user`, the dependency any future protected router depends on).
+
+| Endpoint | Description |
+|---|---|
+| `POST /auth/register` | `{ email, password }` → creates a user, returns the user (no token) |
+| `POST /auth/login` | `{ email, password }` → `{ access_token, token_type }` |
+| `POST /auth/logout` | Requires `Authorization: Bearer <token>`. Stateless in V1 — just confirms the token is valid. |
+| `GET /auth/me` | Requires `Authorization: Bearer <token>`. Returns the current user — reference example for protecting a route. |
+
+Run the tests (spins up tables against a real Postgres+pgvector database,
+since the `Link` model's vector column has no SQLite equivalent):
+
+```bash
+cd backend
+source .venv/bin/activate
+export TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/intend_link_saver_test
+pytest
 ```
