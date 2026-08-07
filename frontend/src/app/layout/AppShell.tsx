@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { NavBar, NavLinkItem } from "../../components/ui/NavBar";
 import { Container } from "./Container";
 
 export interface AppShellProps {
-  /** Which top-nav item is active — kept as a plain prop here since
-   * routing itself isn't wired up yet (no pages this module). */
   activeNav?: "dashboard" | "search";
   navActions?: ReactNode;
   children: ReactNode;
@@ -16,11 +15,17 @@ export interface AppShellProps {
  * max-width-constrained content area with generous vertical rhythm.
  */
 export function AppShell({ activeNav, navActions, children }: AppShellProps) {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-dvh bg-canvas">
       <NavBar brand="Intend Link Saver" actions={navActions}>
-        <NavLinkItem active={activeNav === "dashboard"}>Dashboard</NavLinkItem>
-        <NavLinkItem active={activeNav === "search"}>Search</NavLinkItem>
+        <NavLinkItem active={activeNav === "dashboard"} onClick={() => navigate("/")}>
+          Dashboard
+        </NavLinkItem>
+        <NavLinkItem active={activeNav === "search"} onClick={() => navigate("/search")}>
+          Search
+        </NavLinkItem>
       </NavBar>
       <Container as="main" className="py-8">
         {children}

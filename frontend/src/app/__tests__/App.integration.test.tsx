@@ -12,16 +12,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
 import * as authApi from "../../api/auth";
 import { AUTH_TOKEN_KEY } from "../../api/client";
+import * as linksApi from "../../api/links";
 
 vi.mock("../../api/auth");
+vi.mock("../../api/links");
 
 const mockUser = { id: "1", email: "person@example.com", created_at: "2026-01-01T00:00:00Z" };
+const emptyLinks = { items: [], total: 0, page: 1, page_size: 20, pages: 0 };
 
 describe("App (routing + auth integration)", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
     window.history.pushState({}, "", "/");
+    vi.mocked(linksApi.listLinks).mockResolvedValue(emptyLinks);
   });
   afterEach(() => localStorage.clear());
 
@@ -30,7 +34,7 @@ describe("App (routing + auth integration)", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Log in" })).toBeInTheDocument());
   });
 
-  it("registering lands on the authenticated shell with the placeholder home and user menu", async () => {
+  it("registering lands on the authenticated shell (Home page) with the user menu", async () => {
     vi.mocked(authApi.registerUser).mockResolvedValue(mockUser);
     vi.mocked(authApi.loginUser).mockResolvedValue({ access_token: "tok", token_type: "bearer" });
     vi.mocked(authApi.getCurrentUser).mockResolvedValue(mockUser);
@@ -48,10 +52,10 @@ describe("App (routing + auth integration)", () => {
     await userEvent.type(screen.getByLabelText("Confirm password"), "supersecret123");
     await userEvent.click(screen.getByRole("button", { name: "Create account" }));
 
-    // authenticated shell: nav bar + placeholder content + user menu
+    // authenticated shell: nav bar + Home page content + user menu
     await waitFor(() => expect(screen.getByRole("banner")).toBeInTheDocument());
     expect(screen.getByText("person@example.com")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Welcome, person@example.com" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Save a link" })).toBeInTheDocument();
   });
 
   it("logging out returns to /login and blocks re-entry to the protected route", async () => {
@@ -76,5 +80,16 @@ describe("App (routing + auth integration)", () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole("banner")).toBeInTheDocument());
     expect(screen.queryByRole("heading", { name: "Log in" })).not.toBeInTheDocument();
+  });
+
+  it("navigating to /search shows the Search page within the same shell", async () => {
+    localStorage.setItem(AUTH_TOKEN_KEY, "existing-token");
+    vi.mocked(authApi.getCurrentUser).mockResolvedValue(mockUser);
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("banner")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByRole("heading", { name: "Search" })).toBeInTheDocument();
   });
 });

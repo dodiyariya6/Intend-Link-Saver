@@ -7,10 +7,12 @@ authentication (register/login/JWT), Link CRUD (ownership-scoped,
 pagination, filtering), an AI enrichment pipeline (fetch → summarize → tag
 → classify via Claude), embedding generation, semantic search (pgvector
 cosine similarity), a reusable frontend UI component library + design
-system, and the frontend authentication pages + application shell. The
-real Dashboard/Save Link/Search UI and the conversational Memory Assistant
-are not implemented yet. See `/root/.claude/plans/` (or your own copy of
-the architecture plan) for the full design.
+system, and the full frontend: auth pages, application shell, the Home
+page (save + recent links), and the Search page. Kept intentionally
+minimal throughout (college project, not a production SaaS) — the
+conversational Memory Assistant is the only piece not implemented yet.
+See `/root/.claude/plans/` (or your own copy of the architecture plan)
+for the full design.
 
 ## Stack
 
@@ -48,11 +50,16 @@ intend-link-saver/
 │       │   └── feedback/ # EmptyState, ErrorState, Skeleton
 │       ├── app/
 │       │   ├── layout/   # Container, AppShell, AuthLayout (base layout components)
-│       │   └── providers.tsx  # app-wide providers (ToastProvider)
+│       │   ├── guards.tsx, router.tsx, providers.tsx
+│       │   └── FullPageLoader.tsx
 │       ├── dev/          # internal-only component preview, not a product page
-│       ├── api/          # (empty) future API client
-│       ├── pages/        # (empty) future pages — no product UI built yet
-│       └── hooks/        # (empty) future hooks
+│       ├── api/          # client.ts, auth.ts, links.ts, search.ts, types.ts
+│       ├── features/
+│       │   ├── auth/     # AuthContext, LoginForm/RegisterForm/UserMenu, pages
+│       │   ├── links/    # HomePage, SaveLinkForm, LinkListItem, hooks.ts
+│       │   └── search/   # SearchPage, hooks.ts
+│       └── pages/        # (empty) — no separate top-level pages beyond
+│                          # Home/Search/Login/Register, by design
 └── docker-compose.yml
 ```
 
@@ -267,11 +274,39 @@ Dashboard/Save Link/Search UI yet; the authenticated landing route
   (redirects an already-authenticated visitor away from `/login`/`/register`).
   Both show a `FullPageLoader` while `status === "idle"` to avoid a
   flash-redirect for a user with a valid stored token.
-- `src/app/router.tsx` — `/login`, `/register` (public-only), `/`
-  (protected, placeholder home), `*` → `/`.
+- `src/app/router.tsx` — `/login`, `/register` (public-only), `/` (Home),
+  `/search` (Search), both protected, `*` → `/`.
 
-Run the frontend tests (`npm test`, 80 tests) and production build
-(`npm run build`) from `frontend/`. Auth flows were additionally verified
-end-to-end against a live backend + Playwright: registration, validation,
-login (correct/incorrect credentials), logout, protected-route redirects
-(both directions), and invalid/expired-JWT handling.
+Run the frontend tests (`npm test`) and production build (`npm run build`)
+from `frontend/`. Auth flows were additionally verified end-to-end against
+a live backend + Playwright: registration, validation, login
+(correct/incorrect credentials), logout, protected-route redirects (both
+directions), and invalid/expired-JWT handling.
+
+## Frontend: Home & Search Pages
+
+The two remaining pages, deliberately minimal (this is a college project,
+not a production SaaS) — no separate Dashboard/My Links/Link
+Details/Settings/Profile pages, just these two plus the existing auth
+pages and shell.
+
+- `src/features/links/` — `HomePage` (`/`): a save form
+  (`SaveLinkForm`) above a recent-links feed. Saving chains
+  `POST /links` → `POST /links/{id}/enrich` (best-effort; a failed
+  enrichment doesn't fail the save, matching the backend's own graceful
+  degradation) and invalidates the list query on success. Each card
+  (`LinkListItem`, shared with Search) shows the title, domain, the
+  user's note or AI-inferred reason, the AI summary, tags/intent
+  category, and a delete action — composed entirely from existing
+  `Card`/`Badge`/`Tag`/`Button`/`Typography` primitives.
+- `src/features/search/` — `SearchPage` (`/search`): a single query box
+  calling `GET /search`, rendering results with the same `LinkListItem`.
+  Deliberately simple: no filter UI, no pagination controls, no visible
+  similarity score (kept as an internal ranking signal, not shown in the
+  UI). A `503` (embedding provider unavailable) renders a distinct error
+  state from "no results" — the backend makes that distinction on
+  purpose, so the frontend honors it.
+- `AppShell`'s nav items now actually navigate (`useNavigate`) — they
+  were inert placeholders before these routes existed.
+- One real bug fixed in passing: `Layout.test.tsx` needed a
+  `MemoryRouter` wrapper once `AppShell` started using `useNavigate`.
