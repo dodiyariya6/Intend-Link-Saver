@@ -1,7 +1,7 @@
 """
 Router-level tests for POST /search/ask (the Memory Assistant). Reuses the
 same embedding-stub pattern as test_search_router.py; only ai_service's
-Claude call is additionally mocked, since search_service/embedding_service
+Gemini call is additionally mocked, since search_service/embedding_service
 are already covered there and this endpoint doesn't add any new
 search/ranking logic of its own.
 """

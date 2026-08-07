@@ -18,9 +18,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 from app.models.tag import link_tags
 
-# Dimension for the embedding column. 1536 matches common embedding model
-# output sizes (e.g. OpenAI text-embedding-3-small, Voyage models); adjust
-# once the actual embedding provider/model is chosen.
+# Dimension for the embedding column. Gemini's embedding model natively
+# outputs 3072 dims but supports requesting a smaller `output_dimensionality`
+# (see embedding_service.py) — 1536 is requested explicitly to match this
+# column, so changing this value requires updating that call site too.
 EMBEDDING_DIM = 1536
 
 

@@ -3,7 +3,7 @@ Semantic search over a user's saved links, using pgvector cosine similarity
 against the embeddings the enrichment pipeline (Module 6) already writes to
 `Link.embedding`.
 
-This module does NOT talk to Claude or the embedding provider itself — the
+This module does NOT talk to Gemini or the embedding provider itself — the
 router calls `embedding_service.generate_embedding()` directly to embed the
 query (reusing Module 6's logic rather than duplicating it), and passes the
 resulting vector in here.

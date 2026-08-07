@@ -2,7 +2,7 @@
 Router-level tests for GET /search, including auth, ownership, and the
 embedding-failure path. embedding_service.generate_embedding is
 monkeypatched so we control exactly what vector a given query text
-produces, without needing a real OPENAI_API_KEY.
+produces, without needing a real GEMINI_API_KEY.
 """
 import uuid
 

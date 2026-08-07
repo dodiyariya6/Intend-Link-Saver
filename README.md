@@ -5,7 +5,7 @@ An AI-driven link repository that remembers *why* you saved a link.
 Implemented so far: project scaffolding, database models/migrations,
 authentication (register/login/JWT), Link CRUD (ownership-scoped,
 pagination, filtering), an AI enrichment pipeline (fetch → summarize → tag
-→ classify via Claude), embedding generation, semantic search (pgvector
+→ classify via Gemini), embedding generation, semantic search (pgvector
 cosine similarity), and the full frontend: auth pages, application shell,
 the Home page (save + recent links), the Search page, and a minimal
 Memory Assistant page. Kept intentionally minimal throughout (college
@@ -17,7 +17,7 @@ copy of the architecture plan) for the full design.
 - **Backend**: FastAPI (Python), SQLAlchemy, Alembic
 - **Frontend**: React + TypeScript (Vite), Tailwind CSS, Lucide React icons
 - **Database**: PostgreSQL with the `pgvector` extension
-- **AI**: Anthropic Claude (summarization, tagging, intent classification) + OpenAI `text-embedding-3-small` (embeddings)
+- **AI**: Google Gemini `gemini-2.5-flash` (summarization, tagging, intent classification) + Gemini `gemini-embedding-001` (embeddings)
 
 ## Project Structure
 
@@ -171,7 +171,7 @@ referencing a tag name that doesn't exist yet creates it.
 
 ## AI Enrichment Pipeline
 
-Fetches the saved page, extracts readable text, and asks Claude (one call)
+Fetches the saved page, extracts readable text, and asks Gemini (one call)
 to summarize it, propose 3-7 tags, classify an intent category, and — only
 when the user didn't provide their own note (or it was too short to be
 useful) — infer a short reason it might be worth saving. The user's own
@@ -183,14 +183,14 @@ note is never overwritten.
 
 Modules:
 - `app/services/fetch_service.py` — HTTP fetch + `trafilatura` readable-text extraction. Raises `FetchError` on any failure.
-- `app/prompts/summarize_and_tag.py` — the single source of truth for the Claude prompt text and the "is the user's note sparse?" rule.
-- `app/services/ai_service.py` — the **only** module that talks to the Anthropic SDK. Builds the request, parses/validates the JSON response, raises `AIServiceError` on any failure. Swapping providers/models means changing this file only.
-- `app/services/embedding_service.py` — the **only** module that talks to an embedding provider (`EmbeddingProvider` ABC + `OpenAIEmbeddingProvider`). `build_embedding_input()` composes `user_note` (or `ai_reason` as fallback) + `ai_summary` + tags — search should match on *why* something was saved, not just what it's about. Raises `EmbeddingServiceError` on any failure.
+- `app/prompts/summarize_and_tag.py` — the single source of truth for the summarization prompt text and the "is the user's note sparse?" rule.
+- `app/services/ai_service.py` — the **only** module that talks to the Gemini `generate_content` API. Builds the request, parses/validates the JSON response, raises `AIServiceError` on any failure. Swapping providers/models means changing this file only.
+- `app/services/embedding_service.py` — the **only** module that talks to an embedding provider (`EmbeddingProvider` ABC + `GeminiEmbeddingProvider`). `build_embedding_input()` composes `user_note` (or `ai_reason` as fallback) + `ai_summary` + tags — search should match on *why* something was saved, not just what it's about. Raises `EmbeddingServiceError` on any failure.
 - `app/services/enrichment_service.py` — orchestrates fetch → AI → embed → persist. On a fetch/AI failure, the link is left exactly as it was except `status` becomes `"failed"`. An embedding failure is non-fatal to the rest — the AI summary/tags/category are still saved, `status` still becomes `"enriched"`, but `embedding_generated` comes back `false`. AI-generated tags are merged with (not replacing) any tags the user already added manually. Every call to `/enrich` regenerates the embedding from whatever content is current — there's no skip-if-exists caching, so re-triggering enrichment after editing a link's note/url/tags naturally produces an up-to-date vector.
 
 `Link.status` values: `"ready"` (saved, not yet enriched) → `"enriched"` (AI succeeded — embedding may or may not have) or `"failed"` (fetch or AI step failed — link preserved, retry by calling `/enrich` again).
 
-Requires `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in `backend/.env` to actually call Claude and generate embeddings; without them, both steps fail gracefully (link preserved, `success`/`embedding_generated` reflect what actually happened).
+Requires `GEMINI_API_KEY` in `backend/.env` to actually call the summarization model and generate embeddings; without it, both steps fail gracefully (link preserved, `success`/`embedding_generated` reflect what actually happened).
 
 ## Semantic Search
 
@@ -317,7 +317,7 @@ cited. No conversation history, chat bubbles, streaming, or persistence.
 
 | Endpoint | Description |
 |---|---|
-| `POST /search/ask` | `{ question }` → `{ answer, cited_links }`. Reuses the exact same `embedding_service`/`search_service` machinery as `GET /search` to find up to 5 candidate links, then one Claude call (`ai_service.answer_query`, `app/prompts/answer_query.py`) produces a short conversational answer citing them. No matching links → a canned "couldn't find anything" answer with no AI call. Embedding or Claude failure → `503`, same pattern as `GET /search`. |
+| `POST /search/ask` | `{ question }` → `{ answer, cited_links }`. Reuses the exact same `embedding_service`/`search_service` machinery as `GET /search` to find up to 5 candidate links, then one Gemini call (`ai_service.answer_query`, `app/prompts/answer_query.py`) produces a short conversational answer citing them. No matching links → a canned "couldn't find anything" answer with no AI call. Embedding or Gemini failure → `503`, same pattern as `GET /search`. |
 
 Frontend: `src/features/memoryAssistant/` — `MemoryAssistantPage` (`/assistant`)
 reuses `LinkListItem` to render `cited_links`, exactly like Home/Search.

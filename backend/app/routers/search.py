@@ -6,7 +6,7 @@ this router never talks to an embedding provider directly.
 
 POST /search/ask: the Memory Assistant. Reuses the exact same
 embedding_service + search_service machinery as GET /search to find
-candidate links, then makes one Claude call (via ai_service.answer_query)
+candidate links, then makes one Gemini call (via ai_service.answer_query)
 to produce a short conversational answer citing them. No new
 search/ranking logic — this endpoint is a thin layer on top of what
 already exists.
@@ -25,7 +25,7 @@ from app.services import ai_service, embedding_service, search_service
 
 router = APIRouter(prefix="/search", tags=["search"])
 
-# How many top-matching links to hand to Claude as candidates for /ask.
+# How many top-matching links to hand to Gemini as candidates for /ask.
 # Kept small and fixed (no page/page_size on this endpoint) since the
 # Memory Assistant is meant to answer from what's clearly relevant, not
 # page through results.

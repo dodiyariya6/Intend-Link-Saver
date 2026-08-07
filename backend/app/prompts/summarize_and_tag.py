@@ -1,5 +1,5 @@
 """
-Prompt for the single enrichment Claude call: summarize the page, propose
+Prompt for the single enrichment Gemini call: summarize the page, propose
 tags, classify intent, and (only when needed) infer why it was saved.
 
 Keeping the prompt text here rather than inline in ai_service.py means
@@ -7,7 +7,7 @@ prompt iteration is a change to this file only — ai_service.py just calls
 these functions and doesn't know or care what the wording is.
 """
 
-# A note shorter than this is treated as "not really a note" and Claude is
+# A note shorter than this is treated as "not really a note" and the model is
 # asked to infer a reason to fill the gap instead.
 MIN_NOTE_LENGTH = 12
 

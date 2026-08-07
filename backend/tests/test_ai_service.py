@@ -1,10 +1,9 @@
 """
-Tests for ai_service — the Anthropic client is mocked so these run without
+Tests for ai_service — the Gemini client is mocked so these run without
 network access or a real API key, while still exercising the real request
 construction and response-parsing logic.
 """
 import json
-from types import SimpleNamespace
 
 import pytest
 
@@ -13,28 +12,27 @@ from app.models.link import Link
 from app.services import ai_service
 
 
-class _FakeTextBlock:
+class _FakeResponse:
     def __init__(self, text: str):
-        self.type = "text"
         self.text = text
 
 
-class _FakeMessages:
+class _FakeModels:
     def __init__(self, response_text: str, *, raise_error: Exception | None = None):
         self._response_text = response_text
         self._raise_error = raise_error
         self.last_call_kwargs = None
 
-    def create(self, **kwargs):
+    def generate_content(self, **kwargs):
         self.last_call_kwargs = kwargs
         if self._raise_error:
             raise self._raise_error
-        return SimpleNamespace(content=[_FakeTextBlock(self._response_text)])
+        return _FakeResponse(self._response_text)
 
 
 class _FakeClient:
     def __init__(self, response_text: str, *, raise_error: Exception | None = None):
-        self.messages = _FakeMessages(response_text, raise_error=raise_error)
+        self.models = _FakeModels(response_text, raise_error=raise_error)
 
 
 VALID_RESPONSE = json.dumps(
@@ -49,7 +47,7 @@ VALID_RESPONSE = json.dumps(
 
 @pytest.fixture(autouse=True)
 def _set_api_key(monkeypatch):
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
 
 
 def test_summarize_and_tag_success(monkeypatch):
@@ -66,8 +64,10 @@ def test_summarize_and_tag_success(monkeypatch):
     assert result.ai_reason is None
 
     # confirm the request was actually built with our model/system prompt
-    assert fake_client.messages.last_call_kwargs["model"] == ai_service.CLAUDE_MODEL
-    assert "JSON object" in fake_client.messages.last_call_kwargs["system"]
+    call_kwargs = fake_client.models.last_call_kwargs
+    assert call_kwargs["model"] == ai_service.GEMINI_CHAT_MODEL
+    assert call_kwargs["config"].response_mime_type == "application/json"
+    assert "JSON object" in call_kwargs["config"].system_instruction
 
 
 def test_summarize_and_tag_infers_reason_when_note_missing(monkeypatch):
@@ -87,7 +87,7 @@ def test_summarize_and_tag_infers_reason_when_note_missing(monkeypatch):
 
 
 def test_summarize_and_tag_raises_without_api_key(monkeypatch):
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
     with pytest.raises(ai_service.AIServiceError):
         ai_service.summarize_and_tag(page_text="x", user_note=None, url="https://example.com")
 
@@ -126,10 +126,10 @@ def test_summarize_and_tag_raises_on_too_few_tags(monkeypatch):
 
 
 def test_summarize_and_tag_raises_when_provider_call_fails(monkeypatch):
-    import anthropic
+    from google.genai import errors as genai_errors
 
     fake_client = _FakeClient(
-        "", raise_error=anthropic.APIConnectionError(request=SimpleNamespace())
+        "", raise_error=genai_errors.ClientError(429, {"error": {"message": "rate limited"}})
     )
     monkeypatch.setattr(ai_service, "_get_client", lambda: fake_client)
 
@@ -161,12 +161,13 @@ def test_answer_query_success(monkeypatch):
     answer = ai_service.answer_query(question="what did I save about pricing?", candidates=[_make_link()])
 
     assert "Competitor Pricing Breakdown" in answer
-    assert fake_client.messages.last_call_kwargs["model"] == ai_service.CLAUDE_MODEL
-    assert "candidate links" in fake_client.messages.last_call_kwargs["system"].lower()
+    call_kwargs = fake_client.models.last_call_kwargs
+    assert call_kwargs["model"] == ai_service.GEMINI_CHAT_MODEL
+    assert "candidate links" in call_kwargs["config"].system_instruction.lower()
 
 
 def test_answer_query_raises_without_api_key(monkeypatch):
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
     with pytest.raises(ai_service.AIServiceError):
         ai_service.answer_query(question="x", candidates=[_make_link()])
 
@@ -179,9 +180,11 @@ def test_answer_query_raises_on_empty_response(monkeypatch):
 
 
 def test_answer_query_raises_when_provider_call_fails(monkeypatch):
-    import anthropic
+    from google.genai import errors as genai_errors
 
-    fake_client = _FakeClient("", raise_error=anthropic.APIConnectionError(request=SimpleNamespace()))
+    fake_client = _FakeClient(
+        "", raise_error=genai_errors.ClientError(429, {"error": {"message": "rate limited"}})
+    )
     monkeypatch.setattr(ai_service, "_get_client", lambda: fake_client)
     with pytest.raises(ai_service.AIServiceError):
         ai_service.answer_query(question="x", candidates=[_make_link()])

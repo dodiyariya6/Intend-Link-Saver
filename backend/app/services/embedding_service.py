@@ -4,14 +4,16 @@ an embedding provider.
 
 Mirrors the shape of ai_service.py: an abstract `EmbeddingProvider`
 interface plus one concrete implementation, so swapping providers/models
-later (e.g. to Voyage AI) means changing this file only — callers just use
+later means changing this file only — callers just use
 `build_embedding_input()` and `generate_embedding()` and get back a
 `list[float]` of length `EMBEDDING_DIM`.
 """
 import logging
 from abc import ABC, abstractmethod
 
-from openai import OpenAI, OpenAIError
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
 
 from app.config import settings
 from app.models.link import EMBEDDING_DIM
@@ -36,24 +38,29 @@ class EmbeddingProvider(ABC):
         ...
 
 
-class OpenAIEmbeddingProvider(EmbeddingProvider):
+class GeminiEmbeddingProvider(EmbeddingProvider):
     """
-    OpenAI's embeddings API. Chosen as the default provider because
-    `text-embedding-3-small` outputs 1536-dimensional vectors, matching the
-    existing `Link.embedding` column exactly — no schema change needed.
+    Google's Gemini embeddings API. `gemini-embedding-001` natively outputs
+    3072-dimensional vectors, so `output_dimensionality` is pinned to
+    EMBEDDING_DIM (1536) on every call — that's what makes the vectors match
+    the existing `Link.embedding` column exactly, no schema change needed.
     """
 
     def __init__(self, api_key: str, model: str | None = None):
-        self._client = OpenAI(api_key=api_key)
+        self._client = genai.Client(api_key=api_key)
         self._model = model or settings.embedding_model
 
     def embed(self, text: str) -> list[float]:
         try:
-            response = self._client.embeddings.create(model=self._model, input=text)
-        except OpenAIError as exc:
+            response = self._client.models.embed_content(
+                model=self._model,
+                contents=text,
+                config=genai_types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIM),
+            )
+        except genai_errors.APIError as exc:
             raise EmbeddingServiceError(f"Embedding provider call failed: {exc}") from exc
 
-        vector = list(response.data[0].embedding)
+        vector = list(response.embeddings[0].values)
         if len(vector) != EMBEDDING_DIM:
             raise EmbeddingServiceError(
                 f"Embedding provider returned {len(vector)} dims, expected {EMBEDDING_DIM}"
@@ -62,9 +69,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
 
 def _get_provider() -> EmbeddingProvider:
-    if not settings.openai_api_key:
-        raise EmbeddingServiceError("OPENAI_API_KEY is not configured")
-    return OpenAIEmbeddingProvider(api_key=settings.openai_api_key)
+    if not settings.gemini_api_key:
+        raise EmbeddingServiceError("GEMINI_API_KEY is not configured")
+    return GeminiEmbeddingProvider(api_key=settings.gemini_api_key)
 
 
 def build_embedding_input(

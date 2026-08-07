@@ -16,16 +16,13 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
 
-    # Claude — summarization/tagging/intent classification (app/services/ai_service.py)
-    anthropic_api_key: str = ""
-
-    # Embeddings — semantic-search vectors (app/services/embedding_service.py).
-    # text-embedding-3-small outputs 1536 dims, matching Link.embedding's
-    # column size exactly. Separate provider/model from Claude on purpose —
-    # Anthropic doesn't offer an embeddings API, and keeping this behind its
-    # own setting makes swapping providers (e.g. Voyage) a config change.
-    openai_api_key: str = ""
-    embedding_model: str = "text-embedding-3-small"
+    # Google Gemini — the app's single AI provider. Used both for chat
+    # generation (summarization/tagging/intent classification and the
+    # Memory Assistant's answers, app/services/ai_service.py) and for
+    # embeddings (semantic-search vectors, app/services/embedding_service.py).
+    # One key covers both, so there's only one credential to configure.
+    gemini_api_key: str = ""
+    embedding_model: str = "gemini-embedding-001"
 
     cors_origins: list[str] = ["http://localhost:5173"]
 

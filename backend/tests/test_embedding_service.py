@@ -1,10 +1,8 @@
 """
-Tests for embedding_service — the OpenAI client is mocked so these run
+Tests for embedding_service — the Gemini client is mocked so these run
 without network access or a real API key, while still exercising the real
 request construction, dimension validation, and input-building logic.
 """
-from types import SimpleNamespace
-
 import pytest
 
 from app.config import settings
@@ -12,27 +10,37 @@ from app.models.link import EMBEDDING_DIM
 from app.services import embedding_service
 
 
-class _FakeEmbeddingsResource:
+class _FakeEmbedding:
+    def __init__(self, values: list[float] | None):
+        self.values = values
+
+
+class _FakeEmbedContentResponse:
+    def __init__(self, values: list[float] | None):
+        self.embeddings = [_FakeEmbedding(values)]
+
+
+class _FakeModels:
     def __init__(self, vector: list[float] | None, *, raise_error: Exception | None = None):
         self._vector = vector
         self._raise_error = raise_error
         self.last_call_kwargs = None
 
-    def create(self, **kwargs):
+    def embed_content(self, **kwargs):
         self.last_call_kwargs = kwargs
         if self._raise_error:
             raise self._raise_error
-        return SimpleNamespace(data=[SimpleNamespace(embedding=self._vector)])
+        return _FakeEmbedContentResponse(self._vector)
 
 
 class _FakeClient:
     def __init__(self, vector: list[float] | None, *, raise_error: Exception | None = None):
-        self.embeddings = _FakeEmbeddingsResource(vector, raise_error=raise_error)
+        self.models = _FakeModels(vector, raise_error=raise_error)
 
 
 @pytest.fixture(autouse=True)
 def _set_api_key(monkeypatch):
-    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
 
 
 # --- build_embedding_input -------------------------------------------------
@@ -83,16 +91,18 @@ def test_build_embedding_input_omits_tags_section_when_no_tags():
 def test_generate_embedding_success(monkeypatch):
     fake_vector = [0.1] * EMBEDDING_DIM
     fake_client = _FakeClient(fake_vector)
-    provider = embedding_service.OpenAIEmbeddingProvider.__new__(embedding_service.OpenAIEmbeddingProvider)
+    provider = embedding_service.GeminiEmbeddingProvider.__new__(embedding_service.GeminiEmbeddingProvider)
     provider._client = fake_client
-    provider._model = "text-embedding-3-small"
+    provider._model = "gemini-embedding-001"
     monkeypatch.setattr(embedding_service, "_get_provider", lambda: provider)
 
     result = embedding_service.generate_embedding("some text about pricing")
     assert result == fake_vector
     assert len(result) == EMBEDDING_DIM
-    assert fake_client.embeddings.last_call_kwargs["input"] == "some text about pricing"
-    assert fake_client.embeddings.last_call_kwargs["model"] == "text-embedding-3-small"
+    call_kwargs = fake_client.models.last_call_kwargs
+    assert call_kwargs["contents"] == "some text about pricing"
+    assert call_kwargs["model"] == "gemini-embedding-001"
+    assert call_kwargs["config"].output_dimensionality == EMBEDDING_DIM
 
 
 def test_generate_embedding_raises_on_empty_text():
@@ -106,28 +116,28 @@ def test_generate_embedding_raises_on_whitespace_only_text():
 
 
 def test_generate_embedding_raises_without_api_key(monkeypatch):
-    monkeypatch.setattr(settings, "openai_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
     with pytest.raises(embedding_service.EmbeddingServiceError):
         embedding_service.generate_embedding("some text")
 
 
 def test_provider_raises_on_wrong_dimension_response():
-    provider = embedding_service.OpenAIEmbeddingProvider.__new__(embedding_service.OpenAIEmbeddingProvider)
+    provider = embedding_service.GeminiEmbeddingProvider.__new__(embedding_service.GeminiEmbeddingProvider)
     provider._client = _FakeClient([0.1, 0.2, 0.3])  # wrong size
-    provider._model = "text-embedding-3-small"
+    provider._model = "gemini-embedding-001"
 
     with pytest.raises(embedding_service.EmbeddingServiceError):
         provider.embed("some text")
 
 
 def test_provider_raises_on_provider_api_error():
-    from openai import APIConnectionError
+    from google.genai import errors as genai_errors
 
-    provider = embedding_service.OpenAIEmbeddingProvider.__new__(embedding_service.OpenAIEmbeddingProvider)
+    provider = embedding_service.GeminiEmbeddingProvider.__new__(embedding_service.GeminiEmbeddingProvider)
     provider._client = _FakeClient(
-        None, raise_error=APIConnectionError(request=SimpleNamespace())
+        None, raise_error=genai_errors.ClientError(429, {"error": {"message": "rate limited"}})
     )
-    provider._model = "text-embedding-3-small"
+    provider._model = "gemini-embedding-001"
 
     with pytest.raises(embedding_service.EmbeddingServiceError):
         provider.embed("some text")

@@ -5,13 +5,18 @@ provider.
 Everything provider-specific (which SDK, which model, how the response is
 shaped) lives here and in `app.prompts`. To swap providers or models later,
 this is the only file that needs to change — routers and other services
-call `summarize_and_tag()` and never touch the Anthropic SDK directly.
+call `summarize_and_tag()` and never touch the Gemini SDK directly.
+
+Uses the same GEMINI_API_KEY as embedding_service.py — one provider, one
+credential for the whole AI surface of the app.
 """
 import json
 import logging
 from dataclasses import dataclass
 
-import anthropic
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
 
 from app.config import settings
 from app.models.link import Link
@@ -20,10 +25,12 @@ from app.prompts import answer_query as answer_query_prompt
 
 logger = logging.getLogger(__name__)
 
-# claude-3-5-haiku is intentionally chosen over a larger model: this call is
-# summarization/classification, not open-ended reasoning, so the cheaper/
-# faster model is plenty and keeps per-link cost and latency down.
-CLAUDE_MODEL = "claude-3-5-haiku-20241022"
+# "gemini-flash-latest" (Google's maintained alias for their current
+# recommended flash-tier model, rather than a specific dated snapshot that
+# can get deprecated) is intentionally chosen over a larger/"pro" model:
+# this call is summarization/classification, not open-ended reasoning, so
+# the cheaper/faster tier is plenty and keeps per-link cost and latency down.
+GEMINI_CHAT_MODEL = "gemini-flash-latest"
 MAX_OUTPUT_TOKENS = 1024
 REQUIRED_TAG_MIN = 3
 REQUIRED_TAG_MAX = 7
@@ -46,16 +53,14 @@ class EnrichmentResult:
     ai_reason: str | None  # populated only when the caller needed it inferred
 
 
-def _get_client() -> anthropic.Anthropic:
-    if not settings.anthropic_api_key:
-        raise AIServiceError("ANTHROPIC_API_KEY is not configured")
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key)
+def _get_client() -> genai.Client:
+    if not settings.gemini_api_key:
+        raise AIServiceError("GEMINI_API_KEY is not configured")
+    return genai.Client(api_key=settings.gemini_api_key)
 
 
-def _extract_text(response: anthropic.types.Message) -> str:
-    return "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
-    )
+def _extract_text(response: genai_types.GenerateContentResponse) -> str:
+    return response.text or ""
 
 
 def _parse_response(raw_text: str) -> EnrichmentResult:
@@ -96,7 +101,7 @@ def _parse_response(raw_text: str) -> EnrichmentResult:
 
 def summarize_and_tag(*, page_text: str, user_note: str | None, url: str) -> EnrichmentResult:
     """
-    One Claude call that returns a summary, 3-7 tags, an intent category,
+    One Gemini call that returns a summary, 3-7 tags, an intent category,
     and (only if `user_note` is missing/too short) an inferred reason for
     saving. Raises AIServiceError on any failure.
     """
@@ -104,14 +109,21 @@ def summarize_and_tag(*, page_text: str, user_note: str | None, url: str) -> Enr
     user_message = build_user_message(page_text=page_text, user_note=user_note, url=url)
 
     try:
-        response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=MAX_OUTPUT_TOKENS,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
+        response = client.models.generate_content(
+            model=GEMINI_CHAT_MODEL,
+            contents=user_message,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+                # SYSTEM_PROMPT already spells out the exact JSON shape; forcing
+                # JSON mode here makes the provider itself guarantee valid JSON
+                # rather than relying purely on the prompt (belt-and-suspenders
+                # around _parse_response's json.loads below).
+                response_mime_type="application/json",
+            ),
         )
-    except anthropic.APIError as exc:
-        raise AIServiceError(f"Claude API call failed: {exc}") from exc
+    except genai_errors.APIError as exc:
+        raise AIServiceError(f"Gemini API call failed: {exc}") from exc
 
     raw_text = _extract_text(response)
     return _parse_response(raw_text)
@@ -119,7 +131,7 @@ def summarize_and_tag(*, page_text: str, user_note: str | None, url: str) -> Enr
 
 def answer_query(*, question: str, candidates: list[Link]) -> str:
     """
-    One Claude call for the Memory Assistant: given a natural-language
+    One Gemini call for the Memory Assistant: given a natural-language
     question and a handful of the user's own candidate links (already
     found via semantic search — this function does no searching itself),
     return a short conversational answer citing them. Raises
@@ -129,14 +141,16 @@ def answer_query(*, question: str, candidates: list[Link]) -> str:
     user_message = answer_query_prompt.build_user_message(question=question, candidates=candidates)
 
     try:
-        response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=300,
-            system=answer_query_prompt.SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
+        response = client.models.generate_content(
+            model=GEMINI_CHAT_MODEL,
+            contents=user_message,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=answer_query_prompt.SYSTEM_PROMPT,
+                max_output_tokens=300,
+            ),
         )
-    except anthropic.APIError as exc:
-        raise AIServiceError(f"Claude API call failed: {exc}") from exc
+    except genai_errors.APIError as exc:
+        raise AIServiceError(f"Gemini API call failed: {exc}") from exc
 
     answer = _extract_text(response).strip()
     if not answer:

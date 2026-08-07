@@ -1,7 +1,7 @@
 """
 Orchestrates the enrichment pipeline for a single link:
 
-    fetch page text -> summarize/tag/classify via Claude
+    fetch page text -> summarize/tag/classify via Gemini
                      -> generate + store an embedding
                      -> persist onto Link
 
@@ -12,7 +12,7 @@ returned to the caller (not persisted — there's no dedicated error column,
 and adding one isn't necessary for this to work).
 
 Embedding failure is treated as non-fatal to the overall run: the
-summary/tags/category Claude already produced are still valuable and are
+summary/tags/category Gemini already produced are still valuable and are
 still saved, `status` still becomes "enriched", but `embedding_generated`
 comes back False and `detail` explains why. Re-running `/enrich` retries
 the embedding step along with everything else — there's no separate
