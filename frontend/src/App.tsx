@@ -1,21 +1,20 @@
 /**
- * Root app component — scaffolding only.
- *
- * No routing/pages/auth are wired up yet (Module 8 builds the reusable UI
- * component library only). This just confirms the frontend boots, the
- * design system loads correctly, and app-wide providers (Toast) are wired.
+ * Root app component: providers + router. Module 9A scope only — the
+ * authenticated landing route renders a placeholder, not the real
+ * Dashboard (that's Module 9B).
  */
+import { BrowserRouter } from "react-router-dom";
+
 import { AppProviders } from "./app/providers";
-import { Heading, Text } from "./components/ui/Typography";
+import { AppRouter } from "./app/router";
 
 function App() {
   return (
-    <AppProviders>
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-canvas px-6 text-center">
-        <Heading level="h1">Intend Link Saver</Heading>
-        <Text variant="body-lg">Frontend scaffold is running. No pages implemented yet.</Text>
-      </div>
-    </AppProviders>
+    <BrowserRouter>
+      <AppProviders>
+        <AppRouter />
+      </AppProviders>
+    </BrowserRouter>
   );
 }
 

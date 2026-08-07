@@ -21,14 +21,20 @@ export interface NavBarProps {
 export function NavBar({ brand, children, actions, className }: NavBarProps) {
   return (
     <header className={cn("h-16 border-b border-border-subtle bg-surface", className)}>
-      <div className="mx-auto flex h-16 max-w-content items-center justify-between px-6">
-        <div className="flex items-center gap-8">
-          <Text as="span" variant="body" tone="primary" className="font-semibold text-h3">
+      {/* flex-nowrap + overflow-x-auto: on a narrow viewport the row
+          scrolls horizontally instead of wrapping onto multiple lines,
+          which would blow out the fixed 64px header height and clip
+          content (there's no mobile nav collapse pattern yet — this is
+          the documented "secondary priority" fallback from the
+          architecture plan, just correctly non-broken). */}
+      <div className="mx-auto flex h-16 max-w-content flex-nowrap items-center justify-between gap-4 overflow-x-auto px-6">
+        <div className="flex shrink-0 items-center gap-8">
+          <Text as="span" variant="body" tone="primary" className="whitespace-nowrap font-semibold text-h3">
             {brand}
           </Text>
-          {children && <nav className="flex items-center gap-2">{children}</nav>}
+          {children && <nav className="flex items-center gap-2 whitespace-nowrap">{children}</nav>}
         </div>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        {actions && <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">{actions}</div>}
       </div>
     </header>
   );

@@ -6,10 +6,11 @@ Implemented so far: project scaffolding, database models/migrations,
 authentication (register/login/JWT), Link CRUD (ownership-scoped,
 pagination, filtering), an AI enrichment pipeline (fetch → summarize → tag
 → classify via Claude), embedding generation, semantic search (pgvector
-cosine similarity), and a reusable frontend UI component library + design
-system. No product pages (dashboard/login/search UI) or the conversational
-Memory Assistant are implemented yet. See `/root/.claude/plans/` (or your
-own copy of the architecture plan) for the full design.
+cosine similarity), a reusable frontend UI component library + design
+system, and the frontend authentication pages + application shell. The
+real Dashboard/Save Link/Search UI and the conversational Memory Assistant
+are not implemented yet. See `/root/.claude/plans/` (or your own copy of
+the architecture plan) for the full design.
 
 ## Stack
 
@@ -236,3 +237,41 @@ require `aria-label`, error states use `role="alert"`, toasts use
 elements (skeletons, icons) are `aria-hidden`. Visual/responsive behavior
 was additionally verified with real rendered screenshots (desktop 1440px
 and narrow 768px) via the internal preview page.
+
+## Frontend Authentication & Application Shell
+
+Login/register pages, session persistence, route guards, and the
+authenticated app shell — connected to the real backend auth API. No
+Dashboard/Save Link/Search UI yet; the authenticated landing route
+(`PlaceholderHomePage`) exists only to host and verify the shell + guards.
+
+- `src/api/client.ts` — the only module that calls `fetch`; injects the
+  `Authorization` header from `localStorage`, normalizes errors into
+  `ApiError`, and notifies subscribers on any `401` (`onUnauthorized`).
+- `src/api/auth.ts` — `registerUser`/`loginUser`/`logoutUser`/`getCurrentUser`.
+- `src/features/auth/AuthContext.tsx` — the session state boundary
+  (`user`, `status: "idle" | "authenticated" | "unauthenticated"`).
+  Validates any stored token against `/auth/me` on boot rather than
+  trusting its presence; subscribes to `onUnauthorized` so an
+  expired/invalid token anywhere in the app clears the session and sets
+  `sessionExpired` (shown as a banner on the login page).
+- `src/features/auth/hooks/` — `useLogin`/`useRegister`/`useLogout` wrap
+  `AuthContext`'s methods in TanStack Query `useMutation` for
+  `isPending`/`onError` form-submission state.
+- `src/features/auth/components/` — `LoginForm`, `RegisterForm` (client-side
+  validation mirroring the backend's constraints, inline errors for
+  401/409), `UserMenu` (avatar-initial + email + logout, composed from
+  existing `Button`/`Text` — not a new base component).
+- `src/app/guards.tsx` — `RequireAuth` (redirects unauthenticated visitors
+  to `/login`, preserving the intended destination) and `PublicOnlyRoute`
+  (redirects an already-authenticated visitor away from `/login`/`/register`).
+  Both show a `FullPageLoader` while `status === "idle"` to avoid a
+  flash-redirect for a user with a valid stored token.
+- `src/app/router.tsx` — `/login`, `/register` (public-only), `/`
+  (protected, placeholder home), `*` → `/`.
+
+Run the frontend tests (`npm test`, 80 tests) and production build
+(`npm run build`) from `frontend/`. Auth flows were additionally verified
+end-to-end against a live backend + Playwright: registration, validation,
+login (correct/incorrect credentials), logout, protected-route redirects
+(both directions), and invalid/expired-JWT handling.
