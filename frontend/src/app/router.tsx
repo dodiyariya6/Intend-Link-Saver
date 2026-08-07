@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { HomePage } from "../features/links/pages/HomePage";
 import { LoginPage } from "../features/auth/pages/LoginPage";
 import { RegisterPage } from "../features/auth/pages/RegisterPage";
+import { MemoryAssistantPage } from "../features/memoryAssistant/pages/MemoryAssistantPage";
 import { SearchPage } from "../features/search/pages/SearchPage";
 import { PublicOnlyRoute, RequireAuth } from "./guards";
 
@@ -38,6 +39,14 @@ export function AppRouter() {
         element={
           <RequireAuth>
             <SearchPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/assistant"
+        element={
+          <RequireAuth>
+            <MemoryAssistantPage />
           </RequireAuth>
         }
       />

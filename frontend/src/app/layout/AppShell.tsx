@@ -5,7 +5,7 @@ import { NavBar, NavLinkItem } from "../../components/ui/NavBar";
 import { Container } from "./Container";
 
 export interface AppShellProps {
-  activeNav?: "dashboard" | "search";
+  activeNav?: "dashboard" | "search" | "assistant";
   navActions?: ReactNode;
   children: ReactNode;
 }
@@ -25,6 +25,9 @@ export function AppShell({ activeNav, navActions, children }: AppShellProps) {
         </NavLinkItem>
         <NavLinkItem active={activeNav === "search"} onClick={() => navigate("/search")}>
           Search
+        </NavLinkItem>
+        <NavLinkItem active={activeNav === "assistant"} onClick={() => navigate("/assistant")}>
+          Memory Assistant
         </NavLinkItem>
       </NavBar>
       <Container as="main" className="py-8">

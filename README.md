@@ -6,13 +6,11 @@ Implemented so far: project scaffolding, database models/migrations,
 authentication (register/login/JWT), Link CRUD (ownership-scoped,
 pagination, filtering), an AI enrichment pipeline (fetch → summarize → tag
 → classify via Claude), embedding generation, semantic search (pgvector
-cosine similarity), a reusable frontend UI component library + design
-system, and the full frontend: auth pages, application shell, the Home
-page (save + recent links), and the Search page. Kept intentionally
-minimal throughout (college project, not a production SaaS) — the
-conversational Memory Assistant is the only piece not implemented yet.
-See `/root/.claude/plans/` (or your own copy of the architecture plan)
-for the full design.
+cosine similarity), and the full frontend: auth pages, application shell,
+the Home page (save + recent links), the Search page, and a minimal
+Memory Assistant page. Kept intentionally minimal throughout (college
+project, not a production SaaS). See `/root/.claude/plans/` (or your own
+copy of the architecture plan) for the full design.
 
 ## Stack
 
@@ -310,3 +308,16 @@ pages and shell.
   were inert placeholders before these routes existed.
 - One real bug fixed in passing: `Layout.test.tsx` needed a
   `MemoryRouter` wrapper once `AppShell` started using `useNavigate`.
+
+## Memory Assistant
+
+Deliberately minimal (college project, not a production AI chat app): one
+page, one input, one "Ask" button, the AI's answer, and the links it
+cited. No conversation history, chat bubbles, streaming, or persistence.
+
+| Endpoint | Description |
+|---|---|
+| `POST /search/ask` | `{ question }` → `{ answer, cited_links }`. Reuses the exact same `embedding_service`/`search_service` machinery as `GET /search` to find up to 5 candidate links, then one Claude call (`ai_service.answer_query`, `app/prompts/answer_query.py`) produces a short conversational answer citing them. No matching links → a canned "couldn't find anything" answer with no AI call. Embedding or Claude failure → `503`, same pattern as `GET /search`. |
+
+Frontend: `src/features/memoryAssistant/` — `MemoryAssistantPage` (`/assistant`)
+reuses `LinkListItem` to render `cited_links`, exactly like Home/Search.

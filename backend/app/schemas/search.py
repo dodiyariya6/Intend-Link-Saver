@@ -1,5 +1,5 @@
-"""Pydantic schemas for semantic search."""
-from pydantic import BaseModel
+"""Pydantic schemas for semantic search and the Memory Assistant."""
+from pydantic import BaseModel, Field
 
 from app.schemas.link import LinkOut
 
@@ -17,3 +17,12 @@ class SearchResponse(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1)
+
+
+class AskResponse(BaseModel):
+    answer: str
+    cited_links: list[LinkOut]

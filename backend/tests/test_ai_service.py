@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.config import settings
+from app.models.link import Link
 from app.services import ai_service
 
 
@@ -134,3 +135,53 @@ def test_summarize_and_tag_raises_when_provider_call_fails(monkeypatch):
 
     with pytest.raises(ai_service.AIServiceError):
         ai_service.summarize_and_tag(page_text="x", user_note=None, url="https://example.com")
+
+
+# --- answer_query (Memory Assistant) ---------------------------------------
+
+def _make_link(**overrides) -> Link:
+    defaults = dict(
+        url="https://example.com/pricing",
+        title="Competitor Pricing Breakdown",
+        ai_summary="A guide to benchmarking pricing across a market.",
+        user_note="Saving for the Q3 pricing deck",
+        ai_reason=None,
+        status="enriched",
+    )
+    defaults.update(overrides)
+    link = Link(**defaults)
+    link.tags = []  # avoid touching the DB for the relationship
+    return link
+
+
+def test_answer_query_success(monkeypatch):
+    fake_client = _FakeClient("You saved 'Competitor Pricing Breakdown' for the Q3 pricing deck.")
+    monkeypatch.setattr(ai_service, "_get_client", lambda: fake_client)
+
+    answer = ai_service.answer_query(question="what did I save about pricing?", candidates=[_make_link()])
+
+    assert "Competitor Pricing Breakdown" in answer
+    assert fake_client.messages.last_call_kwargs["model"] == ai_service.CLAUDE_MODEL
+    assert "candidate links" in fake_client.messages.last_call_kwargs["system"].lower()
+
+
+def test_answer_query_raises_without_api_key(monkeypatch):
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    with pytest.raises(ai_service.AIServiceError):
+        ai_service.answer_query(question="x", candidates=[_make_link()])
+
+
+def test_answer_query_raises_on_empty_response(monkeypatch):
+    fake_client = _FakeClient("   ")
+    monkeypatch.setattr(ai_service, "_get_client", lambda: fake_client)
+    with pytest.raises(ai_service.AIServiceError):
+        ai_service.answer_query(question="x", candidates=[_make_link()])
+
+
+def test_answer_query_raises_when_provider_call_fails(monkeypatch):
+    import anthropic
+
+    fake_client = _FakeClient("", raise_error=anthropic.APIConnectionError(request=SimpleNamespace()))
+    monkeypatch.setattr(ai_service, "_get_client", lambda: fake_client)
+    with pytest.raises(ai_service.AIServiceError):
+        ai_service.answer_query(question="x", candidates=[_make_link()])

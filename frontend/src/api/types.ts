@@ -66,3 +66,8 @@ export interface SearchResponse {
   page_size: number;
   pages: number;
 }
+
+export interface AskResponse {
+  answer: string;
+  cited_links: Link[];
+}

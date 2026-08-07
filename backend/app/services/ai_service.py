@@ -14,7 +14,9 @@ from dataclasses import dataclass
 import anthropic
 
 from app.config import settings
+from app.models.link import Link
 from app.prompts.summarize_and_tag import SYSTEM_PROMPT, build_user_message
+from app.prompts import answer_query as answer_query_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -113,3 +115,30 @@ def summarize_and_tag(*, page_text: str, user_note: str | None, url: str) -> Enr
 
     raw_text = _extract_text(response)
     return _parse_response(raw_text)
+
+
+def answer_query(*, question: str, candidates: list[Link]) -> str:
+    """
+    One Claude call for the Memory Assistant: given a natural-language
+    question and a handful of the user's own candidate links (already
+    found via semantic search — this function does no searching itself),
+    return a short conversational answer citing them. Raises
+    AIServiceError on any failure.
+    """
+    client = _get_client()
+    user_message = answer_query_prompt.build_user_message(question=question, candidates=candidates)
+
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=300,
+            system=answer_query_prompt.SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+    except anthropic.APIError as exc:
+        raise AIServiceError(f"Claude API call failed: {exc}") from exc
+
+    answer = _extract_text(response).strip()
+    if not answer:
+        raise AIServiceError("AI response was empty")
+    return answer
