@@ -10,6 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -34,6 +35,12 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    environment:
+      # Vite dev-server proxy target (see vite.config.ts). Must be the
+      # compose service name, not localhost — the frontend container has
+      # its own network namespace, so "localhost" there is itself, not
+      # the backend container.
+      BACKEND_URL: http://backend:8000
     ports:
       - "5173:5173"
     volumes:
