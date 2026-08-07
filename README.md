@@ -882,16 +882,6 @@ The dashboard serves as the central workspace where users can save, organize, an
 
 ---
 
-## AI Enrichment
-
-<p align="center">
-  <img src="screenshots/02-ai-enrichment.png" alt="AI Enrichment" width="900"/>
-</p>
-
-Once a link is saved, Google Gemini analyzes its content to automatically generate a concise summary, classify the resource, identify relevant tags, and extract meaningful context. This transforms ordinary bookmarks into structured, searchable knowledge.
-
----
-
 ## Semantic Search
 
 <p align="center">
